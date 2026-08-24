@@ -67,8 +67,11 @@ export default async function handler(req, res) {
     for (let i = 0; i < zarr.length - 1; i += 2) {
       const id = zarr[i];
       const metaR = await kvCall('get', [META_PREFIX + id]);
-      const metaRaw = await metaR.json();
-      const meta = typeof metaRaw === 'string' ? JSON.parse(metaRaw) : (metaRaw.result || metaRaw);
+      const metaJson = await metaR.json();
+      // Upstash GET 返回 {result: "字符串化JSON"}，需二次解析
+      const metaStr = typeof metaJson === 'string' ? metaJson : (metaJson.result || '');
+      let meta = null;
+      try { meta = JSON.parse(metaStr); } catch (e) { continue; }
       if (!meta || typeof meta !== 'object') continue;
       if (mode && meta.mode !== mode) continue; // 模式过滤
       top.push({
