@@ -164,7 +164,11 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* === Mobile Scroll Fix === safe center：内容能装下时居中，超出视口时回退到
+     flex-start 从顶部排布，配合 overflow-y:auto 即可向上滑动看到被裁切的底部信息 */
+  justify-content: safe center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 24px;
   text-align: center;
   background: linear-gradient(180deg, #F5F0FF 0%, #EDE7F6 50%, #E1D5F5 100%);
@@ -190,6 +194,12 @@ body {
   box-shadow: 0 16px 64px rgba(100, 50, 180, 0.25);
   max-width: 360px;
   width: 90%;
+  /* === Game Over Scroll Fix === 内容超过一屏时弹窗内部滚动，保证顶部标题与
+     底部 Retry/Home 按钮、以及中间「打败 X%」信息都能完整看到，不再上下被裁切 */
+  max-height: 92vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 8px 0;   /* 上下留白，避免被固定静音按钮贴边 */
 }
 
 #screen-gameover h2 {
@@ -584,6 +594,16 @@ body {
   .card {
     padding: 24px;
   }
+
+  /* === Mobile Scroll Fix === 首页小屏适当收紧，配合 .screen 的可滚动，
+     降低拥挤感并保证底部信息可滑出 */
+  #screen-start {
+    padding: 16px 16px 28px;
+    gap: 2px;
+  }
+  .subtitle { margin: 0 0 18px; }
+  .brain-boost-text { margin: 12px auto 6px; }
+  .best-score { margin-top: 18px; }
 }
 
 /* ===================== Onboarding + Rotate Warning ===================== */
@@ -910,6 +930,11 @@ body:has(#screen-start:not(.hidden)) #btn-mute {
   left: 16px;
   right: auto;
 }
+/* === Game Over 遮挡修复 === 结束屏 BGM 已停止，静音键无意义；且其固定定位(top:56px right:16px)
+   会盖住「Game Over」标题右上角。结束屏显示时直接隐藏，避免上方信息被挡。 */
+body:has(#screen-gameover:not(.hidden)) #btn-mute {
+  display: none;
+}
 
 /* 选择阶段提示卡片（#game-step-text，文字 "Tap the original ones"）移动端适配：
    与桌面端一致上移约 24px（top:110px -> 86px），纯红文字 + 宋体/Georgia 衬线字体。
@@ -1005,12 +1030,141 @@ body:has(#screen-start:not(.hidden)) #btn-mute {
   color: #9b8bb5;
 }
 
-/* === Game Over 百分位文案 === 浅紫主题下深紫文字，清晰可读 */
-.percentile-note {
+/* === Leaderboard Browsable (任务3) === 首页榜单可点击展开全屏浏览 */
+#global-leaderboard {
+  cursor: pointer;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+#global-leaderboard:active {
+  transform: scale(0.99);
+  box-shadow: 0 2px 10px rgba(100, 50, 180, 0.18);
+}
+.lb-view-all {
+  float: right;
+  border: none;
+  background: none;
+  color: #9C27B0;
   font-family: "Nunito", Arial, sans-serif;
   font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+.lb-view-all:active { opacity: 0.6; }
+
+/* 全屏榜单模态 */
+#leaderboard-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  background: rgba(74, 20, 140, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+#leaderboard-modal.hidden { display: none !important; }
+.lb-modal-card {
+  width: min(440px, 94vw);
+  max-height: 88vh;
+  background: #fff;
+  border: 2px solid #C8A2E8;
+  border-radius: 22px;
+  box-shadow: 0 20px 70px rgba(100, 50, 180, 0.35);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: lbModalPop 0.28s ease-out;
+}
+@keyframes lbModalPop {
+  from { transform: scale(0.92); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+.lb-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(106, 27, 154, 0.12);
+  background: linear-gradient(135deg, #9C27B0, #C8A2E8);
+}
+.lb-modal-head h2 {
+  margin: 0;
+  font-family: 'Fredoka One', sans-serif;
+  font-size: 20px;
+  color: #fff;
+}
+.lb-close {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
   font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lb-close:active { background: rgba(255, 255, 255, 0.4); }
+.lb-modal-sub {
+  padding: 10px 18px;
+  font-family: "Nunito", Arial, sans-serif;
+  font-size: 13px;
   color: #6A1B9A;
-  margin: 4px 0 0;
+  background: #F5F0FF;
+  text-align: left;
+}
+.lb-modal-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0 10px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+}
+.lb-modal-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  font-family: "Nunito", Arial, sans-serif;
+  font-size: 14px;
+  color: #2c2c3a;
+  border-bottom: 1px solid rgba(106, 27, 154, 0.07);
+}
+.lb-modal-row .lb-rank { font-weight: 800; color: #6A1B9A; width: 38px; flex: none; }
+.lb-modal-row .lb-tag  { flex: 1 1 auto; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.lb-modal-row .lb-mode { flex: none; opacity: 0.85; }
+.lb-modal-row .lb-level { font-weight: 800; color: #4A148C; width: 46px; flex: none; text-align: right; }
+.lb-modal-row .lb-acc  { width: 42px; flex: none; text-align: right; color: #888; }
+/* Top 3 高亮 */
+.lb-modal-row.top1 { background: #FFF8E1; }
+.lb-modal-row.top2 { background: #F3F0FF; }
+.lb-modal-row.top3 { background: #FDEEF6; }
+.lb-modal-empty {
+  padding: 48px 18px;
+  text-align: center;
+  font-family: "Nunito", Arial, sans-serif;
+  font-size: 14px;
+  color: #9b8bb5;
+}
+
+/* === Game Over 百分位文案 === 醒目横幅：大字号白字 + 渐变底 + 圆角 + 阴影，
+   确保每局结束都能一眼看到「此局打败了多少人」 */
+.percentile-note {
+  display: inline-block;
+  font-family: "Nunito", Arial, sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  line-height: 1.35;
+  color: #fff;
+  background: linear-gradient(135deg, #9C27B0, #C8A2E8);
+  border-radius: 999px;
+  padding: 11px 20px;
+  margin: 12px auto 6px;
+  box-shadow: 0 6px 18px rgba(156, 39, 176, 0.35);
+  max-width: 100%;
 }
 .percentile-note.hidden { display: none; }

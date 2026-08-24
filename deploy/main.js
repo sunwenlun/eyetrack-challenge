@@ -230,9 +230,9 @@ document.addEventListener('DOMContentLoaded', () => {
           const el = document.getElementById('gameover-percentile');
           if (!el) return;
           if (j.total === 0 || j.percentile === null) {
-            el.textContent = 'Be the first to rank!';
+            el.textContent = 'Be the first to rank! 🏆';
           } else {
-            el.textContent = 'You beat ' + j.percentile + '% of players worldwide';
+            el.textContent = '🏆 You beat ' + j.percentile + '% of players worldwide!';
           }
           el.classList.remove('hidden');
         })
@@ -933,6 +933,58 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(renderLeaderboard, 30000);
   }
   startLeaderboardPoll();
+
+  /* ---------- Leaderboard Full Modal (任务3) ---------- */
+  // 首页榜单可点击展开全屏模态，浏览完整 Top 50（可滚动），不再被跑马灯截断。
+  function openLeaderboardModal() {
+    const modal = document.getElementById('leaderboard-modal');
+    const list = document.getElementById('lb-modal-list');
+    const sub = document.getElementById('lb-modal-sub');
+    if (!modal || !list || !sub) return;
+    modal.classList.remove('hidden');
+    sub.textContent = 'Loading…';
+    list.innerHTML = '<li class="lb-modal-empty">Loading…</li>';
+    fetch('/api/rank')
+      .then((r) => r.json())
+      .then((j) => {
+        if (!j || j.ok === false || !Array.isArray(j.top) || j.top.length === 0) {
+          sub.textContent = 'No scores recorded yet';
+          list.innerHTML = '<li class="lb-modal-empty">Be the first to rank! 🏆</li>';
+          return;
+        }
+        sub.textContent = 'Total players worldwide: ' + j.total;
+        list.innerHTML = j.top.map((p) => {
+          const modeIcon = p.mode === 'campaign' ? '▶' : p.mode === 'daily' ? '📅' : '🏋️';
+          const topCls = p.rank === 1 ? 'top1' : p.rank === 2 ? 'top2' : p.rank === 3 ? 'top3' : '';
+          return '<li class="lb-modal-row ' + topCls + '">' +
+            '<span class="lb-rank">#' + p.rank + '</span>' +
+            '<span class="lb-tag">' + p.anonTag + '</span>' +
+            '<span class="lb-mode">' + modeIcon + '</span>' +
+            '<span class="lb-level">L' + p.maxLevel + '</span>' +
+            '<span class="lb-acc">' + p.accuracy + '%</span>' +
+            '</li>';
+        }).join('');
+      })
+      .catch(() => {
+        sub.textContent = '';
+        list.innerHTML = '<li class="lb-modal-empty">Be the first to rank! 🏆</li>';
+      });
+  }
+
+  function closeLeaderboardModal() {
+    const modal = document.getElementById('leaderboard-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  const lbCard = document.getElementById('global-leaderboard');
+  const lbModal = document.getElementById('leaderboard-modal');
+  if (lbCard) lbCard.addEventListener('click', openLeaderboardModal);
+  // 点背景遮罩或关闭按钮收起（按钮在卡片内，点击会冒泡到卡片触发打开，
+  // 故关闭按钮单独 stopPropagation 避免刚开就关）
+  const lbClose = document.getElementById('btn-lb-close');
+  if (lbClose) lbClose.addEventListener('click', (e) => { e.stopPropagation(); closeLeaderboardModal(); });
+  if (lbModal) lbModal.addEventListener('click', (e) => { if (e.target === lbModal) closeLeaderboardModal(); });
+
 
   /* ---------- boot ---------- */
   updateBest();

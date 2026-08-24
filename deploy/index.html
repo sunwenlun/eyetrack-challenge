@@ -111,7 +111,7 @@
 
   <!-- === Global Leaderboard === 首页滚动全球排行榜（Vercel KV 驱动） -->
   <div id="global-leaderboard" class="leaderboard-card">
-    <div class="leaderboard-head">🌍 Global Rankings</div>
+    <div class="leaderboard-head">🌍 Global Rankings <button id="btn-view-rankings" class="lb-view-all" type="button">View all →</button></div>
     <div class="leaderboard-viewport">
       <ul id="leaderboard-list" class="leaderboard-list">
         <li class="leaderboard-empty">Be the first to rank!</li>
@@ -186,6 +186,18 @@
 <div id="screen-transition" class="screen hidden">
   <div class="transition-title" id="transition-level">Level 2</div>
   <div class="transition-sub">Get ready...</div>
+</div>
+
+<!-- === Leaderboard Full Modal (任务3) === 点击首页榜单「View all」弹出，可滚动浏览完整全球榜 -->
+<div id="leaderboard-modal" class="hidden">
+  <div class="lb-modal-card">
+    <div class="lb-modal-head">
+      <h2>🌍 Global Rankings</h2>
+      <button id="btn-lb-close" class="lb-close" type="button" aria-label="Close">✕</button>
+    </div>
+    <div id="lb-modal-sub" class="lb-modal-sub">Loading…</div>
+    <ul id="lb-modal-list" class="lb-modal-list"></ul>
+  </div>
 </div>
 
 <!-- Dependencies, in load order -->
