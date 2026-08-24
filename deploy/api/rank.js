@@ -56,16 +56,19 @@ export default async function handler(req, res) {
   try {
     // 取 Top 50（ZSet 按 score 降序）—— Upstash: ZRANGE key 0 49 REV WITHSCORES
     const zr = await kvCall('zrange', [LIST_KEY, '0', '49', 'REV', 'WITHSCORES']);
-    const zarr = await zr.json();
+    const zraw = await zr.json();
+    const zarr = zraw.result || zraw; // Upstash 包成 {result:[...]}
     const totalR = await kvCall('zcard', [LIST_KEY]);
-    const total = await totalR.json();
+    const totalRaw = await totalR.json();
+    const total = Number(totalRaw.result !== undefined ? totalRaw.result : totalRaw);
 
     const top = [];
     // zarr 形如 [member, score, member, score, ...]
     for (let i = 0; i < zarr.length - 1; i += 2) {
       const id = zarr[i];
       const metaR = await kvCall('get', [META_PREFIX + id]);
-      const meta = await metaR.json();
+      const metaRaw = await metaR.json();
+      const meta = typeof metaRaw === 'string' ? JSON.parse(metaRaw) : (metaRaw.result || metaRaw);
       if (!meta || typeof meta !== 'object') continue;
       if (mode && meta.mode !== mode) continue; // 模式过滤
       top.push({
@@ -85,7 +88,8 @@ export default async function handler(req, res) {
       const score = lvl * 1000 + acc;
       // 比当前 score 严格低的成员数：zcount key -inf (score-1)
       const zcR = await kvCall('zcount', [LIST_KEY, '-inf', String(score - 1)]);
-      const lower = await zcR.json();
+      const lowerRaw = await zcR.json();
+      const lower = Number(lowerRaw.result !== undefined ? lowerRaw.result : lowerRaw);
       percentile = Math.floor((Number(lower) / Number(total)) * 100);
     }
 
