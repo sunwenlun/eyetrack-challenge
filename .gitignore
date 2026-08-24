@@ -1,0 +1,24 @@
+# Node / npm
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# Vercel local
+.vercel
+
+# WorkBuddy local
+.workbuddy/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test outputs / temp
+_tmp_test/
+*.tmp

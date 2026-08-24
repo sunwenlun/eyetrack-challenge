@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Game Engine Test</title>
+<style>
+  body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+  canvas { border: 2px solid #4FC3F7; border-radius: 8px; }
+  button { margin: 8px; padding: 10px 18px; font-size: 14px; cursor: pointer; background: #4FC3F7; border: none; border-radius: 6px; }
+  .pass { color: #66BB6A; } .fail { color: #EF5350; }
+  pre { background: #000; color: #fff; padding: 12px; border-radius: 6px; font-size: 12px; max-width: 800px; }
+</style>
+</head>
+<body>
+<h2 style="color:#fff;font-family:monospace;">🎮 GameEngine Phase 1 Test</h2>
+<canvas id="game" width="400" height="300"></canvas>
+<br>
+<button onclick="startNormal()">▶ Normal L1</button>
+<button onclick="startDaily()">📅 Daily Challenge</button>
+<button onclick="startL15()">🔥 L15 (Mixed)</button>
+<button onclick="stopGame()">⏹ Stop</button>
+<div id="log"></div>
+
+<script src="config.js"></script>
+<script src="levels.js"></script>
+<script src="game.js"></script>
+<script>
+const log = document.getElementById('log');
+function msg(m, t='info') { const d=document.createElement('div'); d.className=t; d.style.color=t==='pass'?'#66BB6A':t==='fail'?'#EF5350':'#ccc'; d.style.fontFamily='monospace'; d.textContent=m; log.appendChild(d); }
+
+let engine = null;
+
+function makeEngine() {
+  if (engine) engine.stop();
+  const canvas = document.getElementById('game');
+  engine = new GameEngine(canvas);
+  engine.onPhaseChange = (p) => {
+    const names = ['IDLE','SHOW','TRANSITION','MOVE','STOP','INPUT','RESULT'];
+    msg(`→ Phase changed to: ${names[p]} (timer: ${engine.phaseTimer.toFixed(0)}ms)`);
+  };
+}
+
+function startNormal() {
+  makeEngine();
+  msg('--- Starting Normal L1 ---', 'pass');
+  engine.startLevel(1, false);
+}
+
+function startDaily() {
+  makeEngine();
+  msg('--- Starting Daily Challenge ---', 'pass');
+  engine.startLevel(1, true);
+  setTimeout(() => {
+    msg(`Daily seed: ${engine.dailySeed}`, 'pass');
+    msg(`Daily targets: ${JSON.stringify(engine.balls.filter(b=>b.isTarget).map(b=>b.index))}`);
+  }, 100);
+}
+
+function startL15() {
+  makeEngine();
+  msg('--- Starting L15 (12 balls, mixed) ---', 'pass');
+  engine.startLevel(15, false);
+  setTimeout(() => {
+    const types = engine.balls.map(b => b.moveType);
+    msg(`Ball moveTypes: ${types.join(', ')}`);
+  }, 100);
+}
+
+function stopGame() {
+  if (engine) { engine.stop(); msg('Engine stopped'); }
+}
+
+// Auto-start L1 for visual confirmation
+window.onload = () => { startNormal(); };
+</script>
+</body>
+</html>

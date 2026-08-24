@@ -1,0 +1,1016 @@
+/* ===== style.css ===== */
+/* === V2 Full Release === */
+/* EyeTrack — light lavender theme (English UI; brain/ball visual separation) */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: linear-gradient(180deg, #F5F0FF 0%, #EDE7F6 50%, #E1D5F5 100%);
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Nunito', sans-serif;
+  color: #3E1F6E;
+  overflow: hidden;
+}
+
+/* ---------------- layout ---------------- */
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Game board. The canvas clears TRANSPARENT every frame (CONFIG.GAME.
+   transparentBg), so the container's light background and the ghost brain
+   behind the canvas show through — the brain sits *on the board*, behind
+   the balls, de-colored so it can never be mistaken for a purple ball. */
+.game-container {
+  position: relative;
+  width: 400px;
+  max-width: 100vw;
+  margin: 0 auto;
+  aspect-ratio: 5/7;
+  border-radius: 20px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #FDFBFF 0%, #F6F1FD 100%);
+  box-shadow: 0 12px 48px rgba(100, 50, 180, 0.2);
+}
+
+/* Ghost brain: grayscale(1) strips ALL color (cold gray), brightness(1.3)
+   lifts it toward the light board, blur(1px) softens edges, opacity 0.07
+   keeps it a whisper. If assets/brain-bg.png is missing, nothing renders —
+   no error, board stays clean. */
+.game-container::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 90%;
+  height: 90%;
+  transform: translate(-50%, -50%);
+  background: url('assets/brain-bg.png') center/contain no-repeat;
+  filter: blur(1px) grayscale(1) brightness(1.3);
+  opacity: 0.07;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.game-container canvas {
+  position: relative;
+  z-index: 1;
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 20px;
+  touch-action: none;
+}
+
+/* ---------------- HUD ---------------- */
+
+/* === UI Safe Zone Fix === 外层容器：顶部 HUD 安全区 + 棋盘纵向布局。
+   HUD 不再 absolute 叠进棋盘内部，彻底避免遮挡顶部小球。 */
+#game-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* === UI Safe Zone Fix === 顶部 UI 安全区（贴视口顶部，棋盘在其下方居中） */
+.top-ui {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  z-index: 10;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 8px 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  margin: 10px 16px 0;
+}
+
+/* === UI Safe Zone Fix === 徽章样式（timer-badge 预留：当前倒计时画在 canvas 内） */
+.level-badge,
+.timer-badge,
+.accuracy-badge {
+  font-family: 'Nunito', sans-serif;
+  font-weight: bold;
+  font-size: 16px;
+  color: #5E3580;
+  background: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* === UI Safe Zone Fix === 棋盘在安全区下方：留出顶部 40px，
+   高度封顶 70vh（配合 aspect-ratio 5/7 用 width 反推），保证永不顶到 HUD。 */
+#game-container .game-container {
+  z-index: 1;
+  margin: 40px auto 0;
+  width: min(400px, 95vw, calc(70vh * 5 / 7));
+}
+
+.pill {
+  background: rgba(255, 255, 255, 0.85);
+  color: #4A148C;
+  border: 1px solid #E1D5F5;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* 改动 4：HUD 文字深色化（浅色背景下清晰可读） */
+.hud-level,
+.hud-accuracy {
+  color: #3E1F6D;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(100, 50, 180, 0.15);
+}
+
+/* ---------------- screens ---------------- */
+
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  background: linear-gradient(180deg, #F5F0FF 0%, #EDE7F6 50%, #E1D5F5 100%);
+}
+
+#screen-gameover {
+  background: rgba(245, 240, 255, 0.92);  /* 浅紫半透明遮罩 */
+  backdrop-filter: blur(8px);
+}
+
+#screen-transition {
+  z-index: 20;
+  background: rgba(74, 20, 140, 0.45);
+}
+
+/* 改动 5：Game Over 弹窗（浅色主题） */
+#screen-gameover .modal-card {
+  background: #FFFFFF;
+  border: 2px solid #C8A2E8;
+  border-radius: 24px;
+  padding: 32px;
+  text-align: center;
+  box-shadow: 0 16px 64px rgba(100, 50, 180, 0.25);
+  max-width: 360px;
+  width: 90%;
+}
+
+#screen-gameover h2 {
+  color: #4A148C;
+  font-family: 'Fredoka One', sans-serif;
+  font-size: 28px;
+  margin: 0 0 12px 0;
+}
+
+#screen-gameover p {
+  color: #6A1B9A;
+  font-family: 'Nunito', sans-serif;
+  font-size: 16px;
+  margin: 6px 0;
+}
+
+/* ---------------- typography ---------------- */
+
+/* === V2 Full Release === shorter English title gets a touch more size
+   and letter-spacing so the start screen stays visually full. */
+.title {
+  color: #4A148C;
+  font-family: 'Fredoka One', sans-serif;
+  font-size: 46px;
+  letter-spacing: 1px;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(156, 39, 176, 0.2);
+  margin: 0 0 16px;
+}
+
+.subtitle {
+  color: #6A1B9A;
+  font-size: 16px;
+  text-align: center;
+  max-width: 340px;
+  line-height: 1.5;
+  margin: 0 0 32px;
+}
+
+/* === Brain Boost Text === 三按钮容器（间距由 gap 控制） */
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  margin: 16px 0 4px;
+}
+
+/* .btn 自带 margin:8px，在 gap 容器内清零，避免间距叠加成 26px */
+.menu-buttons .btn {
+  margin: 0;
+}
+
+/* === Brain Boost Text === Version A 科学感益智文案卡片 */
+.brain-boost-text {
+  color: #5E3580;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  max-width: 340px;
+  margin: 16px auto 8px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  border-left: 3px solid #9C27B0;
+  border-right: 3px solid #9C27B0;
+}
+
+/* === Practice Mode + Unified Wallbounce === best-line 兼容新 .best-score(span) 结构 */
+.best-line,
+.best-score {
+  margin-top: 28px;
+  font-size: 14px;
+  color: rgba(106, 27, 154, 0.6);
+}
+
+.transition-title {
+  font-family: 'Fredoka One', cursive;
+  font-size: 48px;
+  color: #E1D5F5;
+  text-shadow: 0 0 24px rgba(179, 136, 255, 0.8);
+}
+
+.transition-sub {
+  margin-top: 8px;
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ---------------- buttons ---------------- */
+
+/* Shared shape; color comes from .btn-primary / .btn-secondary. */
+.btn {
+  display: block;
+  margin: 8px;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.btn:hover {
+  transform: scale(1.05);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #9C27B0, #C8A2E8);
+  color: #fff;
+  border: none;
+  padding: 14px 28px;
+  border-radius: 50px;
+  font-family: 'Fredoka One', sans-serif;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(156, 39, 176, 0.35);
+  transition: transform 0.2s;
+}
+
+.btn-primary:hover {
+  transform: scale(1.05);
+}
+
+/* === Practice Mode + Unified Wallbounce === 练习/每日按钮（主推闯关为 .btn-primary） */
+.btn-secondary {
+  background: #fff;
+  color: #6A1B9A;
+  border: 2px solid #C8A2E8;
+  padding: 12px 24px;
+  border-radius: 50px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* ---------------- game over card ---------------- */
+
+.card {
+  background: #ffffff;
+  color: #3E1F6E;
+  border-radius: 20px;
+  padding: 32px;
+  text-align: center;
+  width: 100%;
+  max-width: 340px;
+  box-shadow: 0 20px 60px rgba(100, 50, 180, 0.25);
+  /* Tall content (preview + buttons) must stay reachable on short screens */
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.card h2 {
+  font-family: 'Fredoka One', cursive;
+  font-size: 32px;
+  color: #4A148C;
+  margin: 0 0 12px;
+}
+
+.card p {
+  margin: 6px 0;
+  font-size: 16px;
+}
+
+.card .btn {
+  width: 100%;
+  margin: 8px 0 0;
+}
+
+.daily-note {
+  color: #9C27B0;
+  font-weight: 700;
+}
+
+/* ---------------- result card preview & share row ---------------- */
+
+#result-card-preview {
+  width: 220px;
+  height: 390px;
+  border: 2px solid #C8A2E8;
+  border-radius: 16px;
+  background: #F5F0FF;
+  margin: 16px auto;
+  display: block;
+}
+
+.share-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.share-buttons button {
+  padding: 10px 18px;
+  font-size: 14px;
+  border-radius: 50px;
+  border: none;
+  cursor: pointer;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  transition: transform 0.2s;
+}
+
+.share-buttons button:hover {
+  transform: scale(1.05);
+}
+
+#btn-save-image {
+  background: #9C27B0;
+  color: #fff;
+}
+
+#btn-copy-link {
+  background: #FFD54F;
+  color: #1a1a2e;
+}
+
+#btn-native-share {
+  background: #66BB6A;
+  color: #fff;
+}
+
+/* ---------------- practice difficulty modal (=== Practice Difficulty Select ===) ---------------- */
+
+#practice-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(245, 240, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+#practice-modal.hidden {
+  display: none !important;
+}
+
+.practice-desc {
+  color: #6A1B9A;
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.btn-diff {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  text-align: left;
+}
+.btn-diff:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-easy   { background: #E8F5E9; border-color: #81C784; }
+.btn-medium { background: #FFF8E1; border-color: #FFB74D; }
+.btn-hard   { background: #FCE4EC; border-color: #E57373; }
+
+.diff-emoji { font-size: 22px; }
+.diff-name {
+  font-family: 'Fredoka One', sans-serif;
+  font-size: 16px;
+  color: #4A148C;
+  flex-shrink: 0;
+  width: 70px;
+}
+.diff-desc {
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  color: #6A1B9A;
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  color: #9C27B0;
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 8px;
+  padding: 6px 12px;
+}
+
+/* === Share Targets V2 === Game Over 弹窗社交分享按钮组 */
+.share-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 10px 0 4px;
+}
+.btn-share {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid #E0E0E0;
+  background: #FFF;
+  font-size: 18px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-share:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+}
+.btn-share-x { color: #000; border-color: #000; }
+.btn-share-reddit { color: #FF4500; border-color: #FF4500; }
+.btn-share-whatsapp { color: #25D366; border-color: #25D366; }
+.btn-share-facebook { color: #1877F2; border-color: #1877F2; }
+
+.share-row-secondary {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.btn-text-sm {
+  background: none;
+  border: none;
+  color: #9C27B0;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 8px;
+}
+
+/* === Back to Menu === 游戏内左上角返回按钮（.top-ui 为 pointer-events:none，按钮需重新开启交互） */
+.hud-left { display: flex; align-items: center; gap: 8px; }
+.btn-back {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: #5E3580;
+  background: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.btn-back:hover { background: #F3E9FB; }
+
+/* ---------------- utils ---------------- */
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------------- mobile ---------------- */
+
+@media (max-width: 480px) {
+  .game-container {
+    width: 100vw;
+    border-radius: 0;
+  }
+
+  #game-canvas {
+    border-radius: 0;
+  }
+
+  .title {
+    font-size: 30px;
+  }
+
+  .btn-primary {
+    font-size: 16px;
+    padding: 12px 22px;
+  }
+
+  .card {
+    padding: 24px;
+  }
+}
+
+/* ===================== Onboarding + Rotate Warning ===================== */
+/* === Onboarding + Rotate Warning === 横屏提示条 + 首次引导页 */
+
+/* 横屏提示条 */
+#rotate-warning {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #4A148C;
+  color: #fff;
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  padding: 10px 16px;
+  z-index: 2000;
+  animation: slideDown 0.3s ease-out;
+}
+
+#rotate-warning.hidden {
+  display: none !important;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}
+
+/* 竖屏时显示（横屏隐藏） */
+@media (orientation: landscape) {
+  #rotate-warning {
+    display: none !important;
+  }
+}
+
+/* 首次引导页 */
+#onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(245, 240, 255, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1500;
+}
+
+#onboarding-overlay.hidden {
+  display: none !important;
+}
+
+.onboarding-card {
+  background: #fff;
+  border: 2px solid #C8A2E8;
+  border-radius: 28px;
+  padding: 36px 28px 28px;
+  text-align: center;
+  max-width: 340px;
+  width: 90%;
+  box-shadow: 0 20px 80px rgba(100, 50, 180, 0.3);
+  animation: onboardingPop 0.4s ease-out;
+}
+
+@keyframes onboardingPop {
+  from { transform: scale(0.9); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+.onboarding-icon {
+  font-size: 44px;
+  margin-bottom: 4px;
+}
+
+.onboarding-title {
+  color: #4A148C;
+  font-family: 'Fredoka One', sans-serif;
+  font-size: 28px;
+  margin: 0 0 20px 0;
+}
+
+.onboarding-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.tip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #F5F0FF;
+  padding: 10px 14px;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.tip-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.tip-text {
+  color: #3E1F6D;
+  font-family: 'Nunito', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.onboarding-landscape {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 8px 12px;
+  background: #FFF3E0;
+  border-radius: 10px;
+}
+
+.landscape-icon {
+  font-size: 18px;
+}
+
+.landscape-text {
+  color: #E65100;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#btn-onboarding-start {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+#btn-onboarding-replay {
+  width: 100%;
+  background: none;
+  border: 2px dashed #C8A2E8;
+  color: #9C27B0;
+}
+
+/* ===================== Tutorial（首次游玩教程） ===================== */
+/* === Anti-Crowd + Tutorial Choice === 全屏半透明遮罩 + 结束双按钮 */
+
+#tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1600; /* === Onboarding + Rotate Warning === 高于引导页 1500，从引导页点「看演示」时盖在其上 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(74, 20, 140, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+#tutorial-overlay.hidden {
+  display: none;
+}
+
+.tutorial-card {
+  position: relative;
+  width: min(92vw, 360px);
+  background: #FFFFFF;
+  border: 2px solid #C8A2E8;
+  border-radius: 24px;
+  padding: 26px 22px 20px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(100, 50, 180, 0.30);
+  animation: tutorialPop 0.4s ease;
+}
+
+@keyframes tutorialPop {
+  from { transform: scale(0.82); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+/* 右上角关闭按钮 ✕ */
+#btn-tutorial-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #F0E6FB;
+  color: #6A1B9A;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+#btn-tutorial-close:hover { background: #E3D2F5; }
+#btn-tutorial-close:active { transform: scale(0.94); }
+
+.tutorial-icon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.tutorial-title {
+  font-family: 'Fredoka One', sans-serif;
+  font-size: 22px;
+  color: #4A148C;
+  margin: 0 0 14px;
+}
+
+.tutorial-demo {
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto 14px;
+}
+
+#tutorial-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  background: #1a1530;
+  box-shadow: inset 0 0 0 2px rgba(156, 39, 176, 0.20);
+}
+
+.tutorial-text {
+  font-family: 'Nunito', sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #4A148C;
+  margin: 0 0 16px;
+  min-height: 46px;
+}
+
+.tutorial-dots {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.tutorial-dots .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #E1D5F5;
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+
+.tutorial-dots .dot.active {
+  background: #9C27B0;
+  transform: scale(1.3);
+}
+
+/* 动画结束后的操作按钮（再看一遍 / 开始游戏） */
+#tutorial-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+#tutorial-actions.hidden {
+  display: none;
+}
+
+#tutorial-actions .btn-secondary,
+#tutorial-actions .btn-primary {
+  margin: 0;
+  font-size: 15px;
+  padding: 11px 18px;
+}
+
+/* 开始界面右上角控件容器：静音开关 + 帮助按钮水平排列 */
+.top-right-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  z-index: 200;
+}
+
+/* 开始界面右上角的「如何游玩」帮助按钮 / 静音按钮（共用样式，保持一致） */
+.btn-help {
+  position: static;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: #6A1B9A;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(100, 50, 180, 0.20);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.btn-help:hover { transform: scale(1.08); background: #fff; }
+.btn-help:active { transform: scale(0.96); }
+
+/* === Mute Toggle Reposition === 静音开关为全局固定元素，首页与游戏中复用同一
+   按钮、同一 muted 状态（main.js 只切 audio.muted，无重复代码）。
+   默认（游戏中）：右上角，但下移到 HUD 准确率徽章（top≈10~50px）正下方约 6px，
+   避免遮挡分数/关卡文字；首页（#screen-start 可见）用 :has() 切到左上角。 */
+#btn-mute {
+  position: fixed;
+  top: 56px;     /* 游戏中：位于右上角 HUD 分数徽章下方，间距约 6px */
+  right: 16px;
+  left: auto;
+  z-index: 300;  /* 高于 HUD(z-index:10) 与各 screen，确保可点 */
+}
+/* 首页：#screen-start 未隐藏时，静音按钮移到左上角，避开提示文字（与左上边缘间距 16px） */
+body:has(#screen-start:not(.hidden)) #btn-mute {
+  top: 16px;
+  left: 16px;
+  right: auto;
+}
+
+/* 选择阶段提示卡片（#game-step-text，文字 "Tap the original ones"）移动端适配：
+   与桌面端一致上移约 24px（top:110px -> 86px），纯红文字 + 宋体/Georgia 衬线字体。
+   !important 覆盖 main.js 中的内联样式，确保手机端同样生效。边框/圆角/阴影/内边距不动。 */
+@media (max-width: 768px) {
+  #game-step-text {
+    top: 86px !important;
+    color: #FF0000 !important;
+    font-family: "SimSun", "宋体", Georgia, serif !important;
+  }
+  /* 右上角控件移动端可点击区域不小于 44x44 */
+  .top-right-controls { top: 12px; right: 12px; gap: 8px; }
+  .top-right-controls .btn-help {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+  }
+  /* 静音开关：移动端同样不小于 44x44，并同步两个场景的定位偏移 */
+  #btn-mute {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+    top: 52px;     /* 游戏中：下移避让移动端 HUD 徽章 */
+    right: 12px;
+  }
+  body:has(#screen-start:not(.hidden)) #btn-mute {
+    top: 12px;     /* 首页：左上角，与边缘间距 12px */
+    left: 12px;
+    right: auto;
+  }
+}
+
+/* === Global Leaderboard (Vercel KV) === 首页滚动全球排行榜卡片，统一浅紫主题 */
+.leaderboard-card {
+  width: min(400px, 92vw);
+  margin: 14px auto 0;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(106, 27, 154, 0.18);
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(100, 50, 180, 0.10);
+  overflow: hidden;
+  backdrop-filter: blur(4px);
+}
+.leaderboard-head {
+  font-family: "Nunito", Arial, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: #6A1B9A;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(106, 27, 154, 0.12);
+  text-align: left;
+}
+.leaderboard-viewport {
+  height: 132px;            /* 约 3 行可见，其余滚动 */
+  overflow: hidden;
+  position: relative;
+}
+.leaderboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  animation: lb-scroll 22s linear infinite;
+}
+/* 触摸 / 悬停暂停，方便阅读 */
+.leaderboard-viewport:hover .leaderboard-list,
+.leaderboard-viewport:focus-within .leaderboard-list {
+  animation-play-state: paused;
+}
+@keyframes lb-scroll {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(-50%); }  /* 列表复制了一份，滚到一半即无缝循环 */
+}
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-family: "Nunito", Arial, sans-serif;
+  font-size: 13px;
+  color: #2c2c3a;
+  border-bottom: 1px solid rgba(106, 27, 154, 0.06);
+}
+.lb-rank { font-weight: 700; color: #6A1B9A; width: 34px; flex: none; }
+.lb-tag  { flex: 1 1 auto; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-mode { flex: none; opacity: 0.8; }
+.lb-level { font-weight: 700; color: #4A148C; width: 42px; flex: none; text-align: right; }
+.lb-acc  { width: 38px; flex: none; text-align: right; color: #888; }
+.leaderboard-empty {
+  padding: 48px 14px;
+  text-align: center;
+  font-family: "Nunito", Arial, sans-serif;
+  font-size: 14px;
+  color: #9b8bb5;
+}
+
+/* === Game Over 百分位文案 === 浅紫主题下深紫文字，清晰可读 */
+.percentile-note {
+  font-family: "Nunito", Arial, sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #6A1B9A;
+  margin: 4px 0 0;
+}
+.percentile-note.hidden { display: none; }

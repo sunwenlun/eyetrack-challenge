@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>EyeTrack Config Test</title>
+<style>
+  body { background: #1a1a2e; color: #fff; font-family: monospace; padding: 20px; }
+  button { margin: 8px; padding: 12px 20px; font-size: 16px; cursor: pointer; background: #4FC3F7; border: none; border-radius: 8px; }
+  button:hover { background: #29B6F6; }
+  .pass { color: #66BB6A; }
+  .fail { color: #EF5350; }
+  pre { background: #000; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 13px; }
+  #cardPreview { max-width: 360px; border-radius: 12px; margin-top: 12px; display: block; }
+</style>
+</head>
+<body>
+
+<h1>🧪 EyeTrack Challenge — Infrastructure Test</h1>
+
+<div id="results"></div>
+
+<button onclick="testConfig()">1. Test config.js</button>
+<button onclick="testStorage()">2. Test storage.js</button>
+<button onclick="testShare()">3. Test share.js (generates card)</button>
+<button onclick="testAll()">▶ Run All Tests</button>
+
+<canvas id="cardPreview"></canvas>
+
+<script src="config.js"></script>
+<script src="storage.js"></script>
+<script src="share.js"></script>
+
+<script>
+const results = document.getElementById('results');
+
+function log(msg, type = 'info') {
+  const div = document.createElement('div');
+  div.className = type;
+  div.innerHTML = msg;
+  results.appendChild(div);
+  console.log(`[${type}]`, msg);
+}
+
+/* ========== TEST 1: config.js ========== */
+function testConfig() {
+  log('<b>── Test 1: config.js ──</b>');
+
+  // Basic structure
+  if (!window.CONFIG) { log('❌ window.CONFIG not found', 'fail'); return; }
+  log('✅ window.CONFIG exists', 'pass');
+
+  // GAME
+  const g = CONFIG.GAME;
+  log(g.ballRadius === 22 ? '✅ GAME.ballRadius = 22' : `❌ GAME.ballRadius = ${g.ballRadius}`, g.ballRadius === 22 ? 'pass' : 'fail');
+  log(g.targetCount === 3 ? '✅ GAME.targetCount = 3' : `❌ targetCount wrong`, g.targetCount === 3 ? 'pass' : 'fail');
+
+  // Seeded RNG reproducibility
+  const rng1 = CONFIG.DAILY_CHALLENGE.seededRandom('2026-07-25');
+  const rng2 = CONFIG.DAILY_CHALLENGE.seededRandom('2026-07-25');
+  const seq1 = [rng1(), rng1(), rng1()];
+  const seq2 = [rng2(), rng2(), rng2()];
+  const match = seq1.every((v, i) => Math.abs(v - seq2[i]) < 1e-10);
+  log(match ? '✅ seededRandom reproducible across instances' : `❌ sequences differ: ${seq1} vs ${seq2}`, match ? 'pass' : 'fail');
+
+  // Distribution check (1000 calls, expect mean ~0.5)
+  const rng3 = CONFIG.DAILY_CHALLENGE.seededRandom('test-seed-xyz');
+  let sum = 0; for (let i = 0; i < 1000; i++) sum += rng3();
+  const mean = sum / 1000;
+  const distOK = Math.abs(mean - 0.5) < 0.05;
+  log(distOK ? `✅ RNG distribution OK (mean=${mean.toFixed(3)})` : `❌ RNG biased (mean=${mean.toFixed(3)})`, distOK ? 'pass' : 'fail');
+
+  // Fail captions
+  log(CONFIG.SHARE.failCaptions.length >= 10 ? `✅ ${CONFIG.SHARE.failCaptions.length} fail captions loaded` : '❌ Not enough captions', CONFIG.SHARE.failCaptions.length >= 10 ? 'pass' : 'fail');
+
+  // Sounds
+  log(CONFIG.SOUNDS.correct.length === 2 ? '✅ SOUNDS.correct has 2 notes' : '❌ SOUNDS config issue', CONFIG.SOUNDS.correct.length === 2 ? 'pass' : 'fail');
+
+  log('<br>');
+}
+
+/* ========== TEST 2: storage.js ========== */
+function testStorage() {
+  log('<b>── Test 2: storage.js ──</b>');
+
+  if (!window.StorageManager) { log('❌ StorageManager not found', 'fail'); return; }
+  log('✅ StorageManager exists', 'pass');
+
+  // Clean slate
+  localStorage.clear();
+
+  // Best level
+  StorageManager.setBestLevel(5);
+  const best = StorageManager.getBestLevel();
+  log(best === 5 ? `✅ getBestLevel() = ${best}` : `❌ expected 5 got ${best}`, best === 5 ? 'pass' : 'fail');
+
+  // Total plays
+  StorageManager.incrementTotalPlays();
+  StorageManager.incrementTotalPlays();
+  const plays = StorageManager.getTotalPlays();
+  log(plays === 2 ? `✅ getTotalPlays() = ${plays}` : `❌ expected 2 got ${plays}`, plays === 2 ? 'pass' : 'fail');
+
+  // Daily result
+  StorageManager.setDailyResult(8, 73);
+  const daily = StorageManager.getDailyResult();
+  log(daily && daily.level === 8 && daily.accuracy === 73 ? `✅ Daily result saved: L${daily.level} ${daily.accuracy}%` : `❌ daily result broken: ${JSON.stringify(daily)}`, daily && daily.level === 8 ? 'pass' : 'fail');
+
+  // Has played today
+  const played = StorageManager.hasPlayedDailyToday();
+  log(played ? '✅ hasPlayedDailyToday() = true' : '❌ hasPlayedDailyToday() should be true', played ? 'pass' : 'fail');
+
+  // Corruption handling
+  localStorage.setItem('etc_daily_result', 'not-json{{{');
+  const corrupt = StorageManager.getDailyResult();
+  log(corrupt === null ? '✅ Corrupted data gracefully returns null' : `❌ Should return null, got ${corrupt}`, corrupt === null ? 'pass' : 'fail');
+
+  // Privacy mode simulation (overwrite getItem to throw)
+  const origGet = localStorage.getItem;
+  localStorage.getItem = () => { throw new Error('Private mode'); };
+  const safeRead = StorageManager.getBestLevel();
+  localStorage.getItem = origGet;
+  log(safeRead === 1 ? `✅ Privacy mode fallback works (returned ${safeRead})` : `❌ Privacy mode broke`, safeRead === 1 ? 'pass' : 'fail');
+
+  log('<br>');
+}
+
+/* ========== TEST 3: share.js ========== */
+function testShare() {
+  log('<b>── Test 3: share.js ──</b>');
+
+  if (!window.ShareManager) { log('❌ ShareManager not found', 'fail'); return; }
+  log('✅ ShareManager exists', 'pass');
+
+  // Generate card
+  try {
+    const canvas = ShareManager.generateResultCard({ level: 8, accuracy: 73, isDaily: false });
+    log(canvas && canvas.width === 1080 && canvas.height === 1920 ? `✅ Card generated: ${canvas.width}×${canvas.height}` : '❌ Card dimensions wrong', 'pass');
+
+    // Show preview (scale down)
+    const preview = document.getElementById('cardPreview');
+    preview.width = 360;
+    preview.height = 640;
+    const ctx = preview.getContext('2d');
+    ctx.drawImage(canvas, 0, 0, 360, 640);
+    log('✅ Card preview rendered below 👇', 'pass');
+
+    // Normalize accuracy
+    const acc1 = ShareManager._normalizeAccuracy(0.73);
+    const acc2 = ShareManager._normalizeAccuracy(73);
+    log(acc1 === 73 && acc2 === 73 ? '✅ _normalizeAccuracy handles both formats' : `❌ normalize failed: ${acc1}, ${acc2}`, acc1 === 73 ? 'pass' : 'fail');
+
+    // Copy text (only test in secure context)
+    ShareManager.copyShareText({ level: 8, accuracy: 73 }).then(() => {
+      log('✅ Share text copied to clipboard (check your clipboard!)', 'pass');
+    }).catch(err => {
+      log(`⚠️ Clipboard copy failed (expected on file://): ${err.message}`, 'fail');
+    });
+
+  } catch (err) {
+    log(`❌ generateResultCard threw: ${err.message}`, 'fail');
+  }
+
+  log('<br>');
+}
+
+/* ========== RUN ALL ========== */
+function testAll() {
+  results.innerHTML = '';
+  testConfig();
+  setTimeout(() => { testStorage(); setTimeout(() => { testShare(); }, 100); }, 100);
+}
+</script>
+
+</body>
+</html>

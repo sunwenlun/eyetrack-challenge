@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>EyeTrack</title><!-- === V2 Full Release === -->
+<!-- === GA4 Inject === Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2VKEPVF35Z"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-2VKEPVF35Z');
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Game area: canvas + HUD (always mounted, revealed behind the screens) -->
+<!-- === UI Safe Zone Fix === HUD 移出棋盘：#game-container 纵向排列
+     「top-ui 安全区 → 棋盘」，HUD 不再 absolute 叠在 canvas 上遮挡小球。
+     所有 ID（hud / hud-level / hud-accuracy / game-canvas）保持不变，main.js 零改动。 -->
+<div id="app">
+  <div id="game-container">
+    <!-- === Back to Menu === 游戏内左上角返回主菜单按钮 -->
+    <div id="hud" class="top-ui hidden">
+      <div class="hud-left">
+        <button id="btn-back" class="pill btn-back hidden">← Back</button>
+        <span id="hud-level" class="pill hud-level level-badge">Level 1</span>
+      </div>
+      <span id="hud-accuracy" class="pill hud-accuracy accuracy-badge">Accuracy: 0%</span>
+    </div>
+    <div id="canvas-wrap" class="game-container-board game-container">
+      <canvas id="game-canvas" width="400" height="560"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- === Global Mute Toggle === 全局静音开关：首页与游戏中复用同一元素、同一 muted 状态
+     （首页时由 CSS :has(#screen-start:not(.hidden)) 定位到左上角；游戏中定位到右上角） -->
+<button id="btn-mute" class="btn-help" title="Mute / Unmute" aria-label="Mute">🔊</button>
+
+<!-- === Onboarding + Rotate Warning === 横屏提示条 + 首次引导页（在 #screen-start 之前） -->
+<!-- 横屏提示条（竖屏时显示，横屏自动隐藏） -->
+<div id="rotate-warning" class="hidden">📱 Rotate device to landscape for the best experience</div>
+
+<!-- 首次引导页 -->
+<div id="onboarding-overlay" class="hidden">
+  <div class="onboarding-card">
+    <div class="onboarding-icon">👁️</div>
+    <h2 class="onboarding-title">EyeTrack</h2>
+    <div class="onboarding-tips">
+      <div class="tip"><span class="tip-icon">🎯</span><span class="tip-text">Memorize the red-ringed balls</span></div>
+      <div class="tip"><span class="tip-icon">👁️</span><span class="tip-text">They will swim around</span></div>
+      <div class="tip"><span class="tip-icon">👆</span><span class="tip-text">Tap them after they stop</span></div>
+    </div>
+    <div class="onboarding-landscape">
+      <span class="landscape-icon">📱➡️↔️</span><span class="landscape-text">Landscape mode recommended</span>
+    </div>
+    <button id="btn-onboarding-start" class="btn-primary">▶ Start Game</button>
+    <button id="btn-onboarding-replay" class="btn-secondary">🔁 Watch Demo</button>
+  </div>
+</div>
+
+<!-- Start Screen — === V2 Full Release === all-English UI -->
+<div id="screen-start" class="screen">
+  <h1 class="title">👁️ EyeTrack</h1>
+  <p class="subtitle">Remember the highlighted balls, then tap them after they move!</p>
+  <!-- First-time tutorial overlay (driven by main.js) -->
+  <div id="tutorial-overlay" class="hidden">
+    <div class="tutorial-card">
+      <button class="tutorial-skip" id="btn-tutorial-close">✕</button>
+      <div class="tutorial-icon">👁️</div>
+      <h3 class="tutorial-title">EyeTrack</h3>
+      <div class="tutorial-demo">
+        <canvas id="tutorial-canvas" width="280" height="160"></canvas>
+      </div>
+      <p class="tutorial-text" id="tutorial-step">Remember the red-ringed balls</p>
+      <div class="tutorial-dots">
+        <span class="dot active"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+      <!-- Action buttons shown after the demo ends (hidden at first) -->
+      <div id="tutorial-actions" class="hidden" style="margin-top:14px; display:flex; gap:10px; justify-content:center;">
+        <button id="btn-tutorial-replay" class="btn-secondary">🔁 Watch Again</button>
+        <button id="btn-tutorial-start" class="btn-primary">▶ Start Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右上角控件：仅帮助按钮（静音开关为全局固定元素，见下方 #btn-mute） -->
+  <div class="top-right-controls">
+    <button id="btn-help" class="btn-help" title="How to play" aria-label="How to play">❓</button>
+  </div>
+
+  <!-- Three game modes -->
+  <div class="menu-buttons">
+    <button id="btn-practice" class="btn btn-secondary">🏋️ Practice</button>
+    <button id="btn-campaign" class="btn btn-primary">▶ Campaign</button>
+    <button id="btn-daily" class="btn btn-secondary">📅 Daily</button>
+  </div>
+
+  <!-- === Brain Boost Text === Version A benefit copy -->
+  <p class="brain-boost-text">
+    EyeTrack activates your visual cortex and spatial awareness networks while sharpening prefrontal focus. Just a few minutes a day builds lasting attention and faster reaction speed.
+  </p>
+
+  <!-- === Global Leaderboard === 首页滚动全球排行榜（Vercel KV 驱动） -->
+  <div id="global-leaderboard" class="leaderboard-card">
+    <div class="leaderboard-head">🌍 Global Rankings</div>
+    <div class="leaderboard-viewport">
+      <ul id="leaderboard-list" class="leaderboard-list">
+        <li class="leaderboard-empty">Be the first to rank!</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="best-score">Best: Level <span id="best-level">1</span></p>
+</div>
+
+<!-- === Practice Difficulty Select === 练习模式难度选择弹窗（默认隐藏） -->
+<div id="practice-modal" class="hidden">
+  <div class="modal-card">
+    <h2>Practice Mode</h2>
+    <p class="practice-desc">Choose your difficulty</p>
+
+    <button id="btn-practice-easy" class="btn-diff btn-easy">
+      <span class="diff-emoji">🟢</span>
+      <span class="diff-name">Easy</span>
+      <span class="diff-desc">Levels 1-10 · No distractions</span>
+    </button>
+
+    <button id="btn-practice-medium" class="btn-diff btn-medium">
+      <span class="diff-emoji">🟡</span>
+      <span class="diff-name">Medium</span>
+      <span class="diff-desc">Levels 11-20 · Brain shadow</span>
+    </button>
+
+    <button id="btn-practice-hard" class="btn-diff btn-hard">
+      <span class="diff-emoji">🔴</span>
+      <span class="diff-name">Hard</span>
+      <span class="diff-desc">Levels 21-30 · Full distractions</span>
+    </button>
+
+    <button id="btn-practice-cancel" class="btn-text">Cancel</button>
+  </div>
+</div>
+
+<!-- Game Over Screen -->
+<div id="screen-gameover" class="screen hidden">
+  <div class="modal-card">
+    <h2 id="gameover-title">Game Over</h2>
+    <p id="gameover-result">You reached Level 1</p>
+    <p id="gameover-accuracy">Accuracy: 0%</p>
+    <p id="gameover-percentile" class="percentile-note hidden">You beat 0% of players worldwide</p>
+    <p id="gameover-daily" class="daily-note hidden">Daily Challenge result saved!</p>
+    <canvas id="result-card-preview" width="360" height="640"></canvas>
+    <div class="share-buttons">
+      <button id="btn-save-image">📸 Save</button>
+      <button id="btn-copy-link">📋 Copy</button>
+      <button id="btn-native-share">📱 Share</button>
+    </div>
+    <!-- === Share Targets V2 === 社交分享按钮组（URL Intent 方式，纯前端，无 OAuth） -->
+    <div class="share-row">
+      <button class="btn-share btn-share-x" data-target="x">𝕏</button>
+      <button class="btn-share btn-share-reddit" data-target="reddit">📮</button>
+      <button class="btn-share btn-share-whatsapp" data-target="whatsapp">💬</button>
+      <button class="btn-share btn-share-facebook" data-target="facebook">📘</button>
+    </div>
+    <div class="share-row-secondary">
+      <button id="btn-copy-link-v2" class="btn-text-sm">🔗 Copy Link</button>
+      <button id="btn-save-image-v2" class="btn-text-sm">📷 Save Image</button>
+    </div>
+    <!-- 隐藏 canvas，用于导出分享图片 -->
+    <canvas id="result-canvas" style="display:none;"></canvas>
+    <button id="btn-retry" class="btn btn-primary">🔄 Retry</button>
+    <button id="btn-home" class="btn btn-secondary">🏠 Home</button>
+  </div>
+</div>
+
+<!-- Level Transition (800ms) -->
+<div id="screen-transition" class="screen hidden">
+  <div class="transition-title" id="transition-level">Level 2</div>
+  <div class="transition-sub">Get ready...</div>
+</div>
+
+<!-- Dependencies, in load order -->
+<script src="config.js"></script>
+<script src="storage.js"></script>
+<script src="levels.js"></script>
+<script src="bgmManager.js"></script>
+<script src="game.js"></script>
+<script src="qrcode.js"></script>
+<script src="share.js"></script>
+
+  <script src="main.js"></script>
+</body>
+</html>
