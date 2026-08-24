@@ -116,6 +116,6 @@ export default async function handler(req, res) {
     return res.json({ ok: true, id });
   } catch (e) {
     res.statusCode = 200;
-    return res.json({ ok: false, error: 'storage_unavailable' });
+    return res.json({ ok: false, error: 'storage_unavailable', debug_err: String(e && e.message || e) });
   }
 }
