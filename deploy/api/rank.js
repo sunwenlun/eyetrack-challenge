@@ -19,11 +19,13 @@ function kvEnv() {
   if (!url || !token) return null;
   return { url: url.replace(/\/$/, ''), token };
 }
-async function kvGet(path, opts) {
+async function kvCall(command, args) {
   const { url, token } = kvEnv();
+  const enc = encodeURIComponent;
+  const path = '/' + [command, ...args.map(enc)].join('/');
   const r = await fetch(url + path, {
-    ...opts,
-    headers: { ...(opts && opts.headers), Authorization: 'Bearer ' + token },
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token },
   });
   if (!r.ok) throw new Error('KV ' + r.status);
   return r;
@@ -52,17 +54,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 取 Top 50（ZSet 按 score 降序）—— withscores=1 返回 [member, score, ...]
-    const zr = await kvGet('/zrange/' + LIST_KEY + '/0/49?rev=true&withscores=true');
+    // 取 Top 50（ZSet 按 score 降序）—— Upstash: ZRANGE key 0 49 REV WITHSCORES
+    const zr = await kvCall('zrange', [LIST_KEY, '0', '49', 'REV', 'WITHSCORES']);
     const zarr = await zr.json();
-    const totalR = await kvGet('/zcard/' + LIST_KEY);
+    const totalR = await kvCall('zcard', [LIST_KEY]);
     const total = await totalR.json();
 
     const top = [];
     // zarr 形如 [member, score, member, score, ...]
     for (let i = 0; i < zarr.length - 1; i += 2) {
       const id = zarr[i];
-      const metaR = await kvGet('/get/' + META_PREFIX + id);
+      const metaR = await kvCall('get', [META_PREFIX + id]);
       const meta = await metaR.json();
       if (!meta || typeof meta !== 'object') continue;
       if (mode && meta.mode !== mode) continue; // 模式过滤
@@ -82,7 +84,7 @@ export default async function handler(req, res) {
       const acc = clampInt(accuracy, 0, 100, 0);
       const score = lvl * 1000 + acc;
       // 比当前 score 严格低的成员数：zcount key -inf (score-1)
-      const zcR = await kvGet('/zcount/' + LIST_KEY + '/-inf/' + (score - 1));
+      const zcR = await kvCall('zcount', [LIST_KEY, '-inf', String(score - 1)]);
       const lower = await zcR.json();
       percentile = Math.floor((Number(lower) / Number(total)) * 100);
     }

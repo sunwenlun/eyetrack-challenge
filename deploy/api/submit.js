@@ -21,13 +21,21 @@ function kvEnv() {
   if (!url || !token) return null;
   return { url: url.replace(/\/$/, ''), token };
 }
-async function kvGet(path, opts) {
+async function kvCall(command, args, body) {
+  // Upstash REST API 格式：POST /{command}/{arg1}/{arg2}/... 参数拼在路径里
+  // 例：SET key value -> /set/key/value ; ZADD key score member -> /zadd/key/score/member
   const { url, token } = kvEnv();
+  const enc = encodeURIComponent;
+  const path = '/' + [command, ...args.map(enc)].join('/');
   const r = await fetch(url + path, {
-    ...opts,
-    headers: { ...(opts && opts.headers), Authorization: 'Bearer ' + token },
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token },
+    body: body ? JSON.stringify(body) : undefined,
   });
-  if (!r.ok) throw new Error('KV ' + r.status);
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    throw new Error('KV ' + r.status + ' ' + t.slice(0, 200));
+  }
   return r;
 }
 
@@ -95,24 +103,16 @@ export default async function handler(req, res) {
     const createdAt = new Date().toISOString();
     const anonTag = 'Player#' + String(Math.floor(1000 + Math.random() * 9000));
 
-    // ZSet 写入
-    await kvGet('/zadd/' + LIST_KEY, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ score, member: id }),
-    });
-    // 明细写入（KV 的 set 接受任意 JSON 字符串值）
-    await kvGet('/set/' + META_PREFIX + id, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: v.mode,
-        maxLevel: v.maxLevel,
-        accuracy: v.accuracy,
-        createdAt,
-        anonTag,
-      }),
-    });
+    // ZSet 写入（Upstash REST: ZADD key score member）
+    await kvCall('zadd', [LIST_KEY, String(score), id]);
+    // 明细写入（Upstash REST: SET key value，value 为 JSON 字符串）
+    await kvCall('set', [META_PREFIX + id, JSON.stringify({
+      mode: v.mode,
+      maxLevel: v.maxLevel,
+      accuracy: v.accuracy,
+      createdAt,
+      anonTag,
+    })]);
     return res.json({ ok: true, id });
   } catch (e) {
     res.statusCode = 200;
