@@ -40,10 +40,10 @@ function driveToInput(eng, moveMs) {
 /* ==================== levels.js (new schema) ==================== */
 
 const lc1 = Levels.getLevelConfig(1);
-check('L1 wallbounce schema fields', lc1.trajType === 'wallbounce' && lc1.freqRange === 0.4 && lc1.ampRange === 40 && lc1.noiseAmount === 0 && lc1.noiseSpeed === 0);
-check('L1 has 8 balls / 4200ms', lc1.ballCount === 8 && lc1.duration === 4200);
+check('L1 mot schema fields', lc1.trajType === 'mot' && lc1.freqRange === 0.4 && lc1.ampRange === 40 && lc1.noiseAmount === 0 && lc1.noiseSpeed === 0);
+check('L1 has 8 balls / 3360ms', lc1.ballCount === 8 && lc1.duration === 3360);
 const lc15 = Levels.getLevelConfig(15);
-check('L15 wallbounce + noise fields', lc15.trajType === 'wallbounce' && lc15.noiseAmount === 35 && lc15.noiseSpeed === 1.5);
+check('L15 mot + noise fields', lc15.trajType === 'mot' && lc15.noiseAmount === 35 && lc15.noiseSpeed === 1.5);
 const dl = Levels.generateDailyLevel();
 check('daily carries traj fields', typeof dl.trajType === 'string' && typeof dl.freqRange === 'number' && typeof dl.ampRange === 'number' && Array.isArray(dl.targets));
 // === Daily starts at L16 === daily is fixed at L16, seed = 'YYYY-MM-DD-L16'
@@ -52,7 +52,7 @@ console.log('     daily today: L' + dl.level, dl.trajType, 'seed=' + dl.seed, 't
 
 /* ==================== V2: 30 levels + infinite + distractions ==================== */
 
-check('L30 exists with wallbounce cap params', Levels.getLevelConfig(30).level === 30 && Levels.getLevelConfig(30).ballCount === 12);
+check('L30 exists with mot cap params', Levels.getLevelConfig(30).level === 30 && Levels.getLevelConfig(30).ballCount === 10);
 check('L1-L15 carry empty distractions', [1, 5, 10, 15].every((n) => Levels.getLevelConfig(n).distractions.length === 0));
 // === Distraction Overhaul V2 === speedMult 梯度（L16=1.2 → L30=2.6，每关 +0.1）
 const lc16 = Levels.getLevelConfig(16);
@@ -70,7 +70,7 @@ check('speedMult gradient +0.1/level, L30 = 2.6', (() => {
   return true;
 })());
 const lcInf = Levels.getLevelConfig(42);
-check('infinite mode: L42 = L30 params, level number 42, speedMult capped 2.6', lcInf.level === 42 && lcInf.speed === 3.2 && lcInf.ballCount === 12 && lcInf.distractions.length === 3 && lcInf.distractions[0].speedMult === 2.6);
+check('infinite mode: L42 = L30 params, level number 42, speedMult capped 2.6', lcInf.level === 42 && lcInf.speed === 3.2 && lcInf.ballCount === 10 && lcInf.distractions.length === 3 && lcInf.distractions[0].speedMult === 2.6);
 const lcInf2 = Levels.getLevelConfig(999);
 check('infinite mode: L999 still capped, own copy', lcInf2.level === 999 && lcInf2.distractions !== lcInf.distractions);
 
@@ -83,8 +83,8 @@ eng.startLevel(1);
 check('L1 spawns 8 balls', eng.balls.length === 8);
 check('L1 has 3 targets', eng.balls.filter((b) => b.isTarget).length === 3);
 check(
-  'balls carry wallbounce params',
-  eng.balls.every((b) => b.trajType === 'wallbounce' && b.wobbleAmp > 0 && b.wobbleFreq > 0 && b.angle >= 0 && Array.isArray(b.wallHitCount) && b.wallHitCount.length === 4)
+  'balls carry mot (swim) params',
+  eng.balls.every((b) => b.trajType === 'mot' && b.swimAmp > 0 && b.swimFreq > 0 && b.speedFactor > 0 && typeof b.burstT === 'number' && b.angle >= 0)
 );
 driveToInput(eng, eng.levelConfig.duration);
 check('phase sequence 1>2>3>4>5', seen.join('>') === '1>2>3>4>5');
@@ -241,8 +241,8 @@ check('ease fields removed (moveDuration undefined)', typeof ez.moveDuration ===
 const snap = (e) =>
   JSON.stringify(
     e.balls.map((b) => [
-      b.x.toFixed(4), b.y.toFixed(4), b.angle.toFixed(4), b.wobbleAmp.toFixed(4),
-      b.wobbleFreq.toFixed(6), b.trajType, b.isTarget,
+      b.x.toFixed(4), b.y.toFixed(4), b.angle.toFixed(4), (b.swimAmp ?? b.wobbleAmp ?? 0).toFixed(4),
+      (b.swimFreq ?? b.wobbleFreq ?? 0).toFixed(6), b.trajType, b.isTarget,
     ])
   );
 const e1 = new GameEngine(fakeCanvas(400, 560));

@@ -117,6 +117,9 @@ class Ball {
     this.trajType = 'swim';   // 默认；实际由 initBalls 按关卡覆盖（当前全 wallbounce）
     this.targetX = x;         // 当前漫游目标点 X
     this.targetY = y;         // 当前漫游目标点 Y
+    this.cx = x;              // MOT 漫游目标点 X（角度转向用）
+    this.cy = y;              // MOT 漫游目标点 Y
+    this.stay = 0;            // MOT 目标点停留倒计时 (s)
     this.baseSpeed = 1;       // 前进基础速度
     this.swimAmp = 0;         // 垂直摆动幅度 (px)
     this.swimFreq = 0;        // 摆动频率 (Hz)
@@ -127,6 +130,11 @@ class Ball {
     this.targetReachDist = 0; // 接近目标多少 px 时换目标
     this.separateX = 0;       // 软分离累积位移 X
     this.separateY = 0;       // 软分离累积位移 Y
+
+    // === MOT 轨迹（增强 swim）=== 每球独立速度 + 温和周期爆发
+    this.speedFactor = 1;    // 速度系数（MOT：0.85~1.15）
+    this.burst = 0;          // 当前爆发剩余时长 (s)
+    this.burstT = 0;         // 下次爆发倒计时 (s)
   }
 }
 
@@ -172,6 +180,10 @@ class GameEngine {
     // === Phase 2 additions ===
     this.accuracyTracker = { hits: 0, misses: 0 }; // picks within the current level
     this._audioCtx = null;        // Web Audio context, lazily initialized
+
+    // === 选中音效连击 === 连续选对/选错计数（跨局累计，到 3 重置循环）
+    this._streakCorrect = 0;
+    this._streakWrong = 0;
   }
 
   /* ------------------------------ public ------------------------------ */
@@ -216,6 +228,7 @@ class GameEngine {
 
     this.selectedBalls = [];
     this.resetAccuracy(); // === Phase 2 additions === accuracy is per-level
+    this._streakCorrect = 0; this._streakWrong = 0; // 选中音效连击重置
     this.initBalls();
     this._initDistractions(); // === V2 Full Release === L16+ 干扰物
 
@@ -311,6 +324,7 @@ class GameEngine {
     this._rng = Math.random; // 练习布局不要求确定性
     this.selectedBalls = [];
     this.resetAccuracy();     // 每局重置命中/失误统计
+    this._streakCorrect = 0; this._streakWrong = 0; // 选中音效连击重置
     this.initBalls();         // 注意：引擎实际方法名为 initBalls（伪代码 _spawnBalls 不存在）
     this._initDistractions(); // 让该难度段的干扰物（brain/star/earth）真正显示
     // SHOW 用固定记忆时长（伪代码写 levelConfig.duration 会导致记忆阶段过长，已修正）
@@ -435,6 +449,36 @@ class GameEngine {
           ball.targetReachDist = ball.radius * 3;
           ball.separateX = 0;
           ball.separateY = 0;
+
+          break;
+        }
+        case 'mot': {
+          // === MOT 轨迹（移植自测试版 updateMOT，手感顺滑）===
+          // 角度转向（turnRate 限制）→ 连续正弦弯曲 → 速度取角度方向。
+          // 不做强软分离，只靠每帧 _resolveOverlaps 保证零重叠（参考测试版）。
+          const margin = ball.radius + 20;
+
+          ball.x = margin + rng() * Math.max(1, w - margin * 2);
+          ball.y = margin + rng() * Math.max(1, h - margin * 2);
+
+          // 漫游目标点（角度转向朝它走）
+          ball.cx = margin + rng() * Math.max(1, w - margin * 2);
+          ball.cy = margin + rng() * Math.max(1, h - margin * 2);
+
+          ball.angle = rng() * Math.PI * 2;
+          ball.turnRate = 2.4;
+          ball.swimFreq = 0.5 + rng() * 0.9;     // 0.5~1.4
+          ball.swimPhase = rng() * Math.PI * 2;
+          ball.swimAmp = 20 + rng() * 50;         // 20~70
+          ball.swimTime = 0;
+          ball.stay = 1.2 + rng() * 1.4;          // 1.2~2.6s 后换目标
+          ball.speedFactor = 0.85 + rng() * 0.3;  // 0.85~1.15 每球独立速度（制造错身，练前额叶/顶叶）
+          ball.burst = 0;
+          ball.burstT = 1.2 + rng() * 2;          // 错开首次爆发
+          ball.baseSpeed = speed;
+          ball.speedFactor = 0.85 + rng() * 0.3;  // 0.85~1.15 每球独立速度
+          ball.burst = 0;
+          ball.burstT = 1.5 + rng() * 2;          // 1.5~3.5s 后首次爆发
 
           break;
         }
@@ -643,7 +687,11 @@ class GameEngine {
     if (clicked.isTarget) {
       clicked.selectedState = 1; // green ring
       this.accuracyTracker.hits++;
-      this._playTone(_CFG.SOUNDS.correct, 0.12);
+      // === 选中音效连击（MOT 反馈）=== 连续选对：good / good / very good
+      this._streakCorrect++;
+      this._streakWrong = 0;
+      if (this._streakCorrect >= 3) { this._speakWord('veryGood'); this._streakCorrect = 0; }
+      else { this._speakWord('good'); }
       this.selectedBalls.push(clicked);
       // === GA4 Events === 选择目标球埋点
       if (typeof gtag !== 'undefined') {
@@ -655,12 +703,20 @@ class GameEngine {
       // 不计入失败、不结束本局、不进入 selectedBalls（否则 3 次误点会误触"全部选完"
       // 判定），0.5s 后清除红色状态，玩家可继续重试该球。
       if (this.mode === 'practice') {
-        this._playTone([180], 0.1); // 低沉音（freqs 必须为数组）
+        // 连续选错：no / no / oh no
+        this._streakWrong++;
+        this._streakCorrect = 0;
+        if (this._streakWrong >= 3) { this._speakWord('ohNo'); this._streakWrong = 0; }
+        else { this._speakWord('no'); }
         setTimeout(() => { clicked.selectedState = 0; }, 500);
         return;
       }
       this.accuracyTracker.misses++;
-      this._playTone(_CFG.SOUNDS.wrong, 0.2);
+      // === 选中音效连击（MOT 反馈）=== 连续选错：no / no / oh no
+      this._streakWrong++;
+      this._streakCorrect = 0;
+      if (this._streakWrong >= 3) { this._speakWord('ohNo'); this._streakWrong = 0; }
+      else { this._speakWord('no'); }
       this.selectedBalls.push(clicked);
       // === GA4 Events === 选择非目标球（误点）埋点
       if (typeof gtag !== 'undefined') {
@@ -763,6 +819,38 @@ class GameEngine {
       osc.start(start);
       osc.stop(start + dur);
     });
+  }
+
+  /**
+   * Speaks a short feedback word (Good / Very good / No / Oh no) via the
+   * Web Speech API when available; falls back to a synthesized tone when
+   * speechSynthesis is missing (e.g. some embedded webviews / minigame).
+   * @param {'good'|'veryGood'|'no'|'ohNo'} word
+   * @returns {void}
+   */
+  _speakWord(word) {
+    try {
+      if (
+        typeof window !== 'undefined' &&
+        window.speechSynthesis &&
+        window.SpeechSynthesisUtterance
+      ) {
+        const u = new window.SpeechSynthesisUtterance(word);
+        u.lang = 'en-US';
+        u.rate = 1.05;
+        u.pitch = 1.1;
+        u.volume = 1.0;
+        window.speechSynthesis.speak(u);
+        return;
+      }
+    } catch (e) { /* fall through to tone */ }
+    const FB = {
+      good: [659.25, 880.0],
+      veryGood: [523.25, 659.25, 783.99],
+      no: [220.0],
+      ohNo: [180.0, 110.0],
+    };
+    this._playTone(FB[word] || [440.0], 0.14);
   }
 
   /* ------------------------- phase transitions ------------------------- */
@@ -1075,9 +1163,23 @@ class GameEngine {
           const swingVelX = perpX * cosVal * ball.swimFreq * 2;
           const swingVelY = perpY * cosVal * ball.swimFreq * 2;
 
-          // 前进位移
-          const forwardX = dirX * ball.baseSpeed * frameScale;
-          const forwardY = dirY * ball.baseSpeed * frameScale;
+          // 前进位移（MOT：每球独立速度 + 温和周期爆发，制造交叉训练前额叶/顶叶）
+          let effSpeed = ball.baseSpeed;
+          if (ball.trajType === 'mot') {
+            if (ball.burst > 0) {
+              effSpeed *= 1.3;                 // 温和爆发 1.3x（不夸张）
+              ball.burst -= dtSec;
+            } else {
+              ball.burstT -= dtSec;
+              if (ball.burstT <= 0) {
+                ball.burst = 0.5 + rng() * 0.4; // 0.5~0.9s 爆发
+                ball.burstT = 2 + rng() * 2;     // 2~4s 间隔
+              }
+            }
+            effSpeed *= (ball.speedFactor || 1);
+          }
+          const forwardX = dirX * effSpeed * frameScale;
+          const forwardY = dirY * effSpeed * frameScale;
 
           // 合成
           ball.x += forwardX + swingVelX * frameScale;
@@ -1100,6 +1202,58 @@ class GameEngine {
             ball.y = h - ball.radius;
             ball.targetY = h - ball.targetY;
           }
+
+          break;
+        }
+        case 'mot': {
+          // === MOT 运动（移植自测试版 updateMOT，顺滑手感）===
+          // 角度受限转向 + 连续正弦弯曲 + 速度取角度方向 + 碰壁翻角。
+          // 不做强软分离（避免力场互搏颤抖），零重叠靠每帧 _resolveOverlaps。
+          const m = ball.radius;
+          const dtSec = dt / 1000;
+          const frameScale = dtSec * 60;
+          ball.swimTime += dtSec;
+
+          // 朝漫游目标点转向（平滑）
+          const dx = ball.cx - ball.x;
+          const dy = ball.cy - ball.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 14 || ball.stay <= 0) {
+            ball.cx = m + rng() * Math.max(1, w - m * 2);
+            ball.cy = m + rng() * Math.max(1, h - m * 2);
+            ball.stay = 1.2 + rng() * 1.4;
+          } else {
+            ball.stay -= dtSec;
+          }
+          const desired = Math.atan2(dy, dx);
+          let da = desired - ball.angle;
+          while (da > Math.PI) da -= 2 * Math.PI;
+          while (da < -Math.PI) da += 2 * Math.PI;
+          ball.angle += Math.max(-ball.turnRate * dtSec, Math.min(ball.turnRate * dtSec, da));
+          // 连续正弦弯曲（叠加到角度上，自然游动）
+          ball.angle += Math.sin(ball.swimTime * ball.swimFreq * Math.PI * 2 + ball.swimPhase) * ball.swimAmp * dtSec * 0.02;
+
+          // 速度：每球独立速度 + 温和周期爆发（制造交叉，练前额叶/顶叶）
+          let sp = ball.baseSpeed * (ball.speedFactor || 1);
+          if (ball.burst > 0) {
+            sp *= 1.7;                 // 周期爆发 1.7x（与测试版一致）
+            ball.burst -= dtSec;
+          } else {
+            ball.burstT -= dtSec;
+            if (ball.burstT <= 0) {
+              ball.burst = 0.5 + rng() * 0.4; // 0.5~0.9s 爆发
+              ball.burstT = 2 + rng() * 2;     // 2~4s 间隔
+            }
+          }
+          const vel = sp * frameScale;
+          ball.x += Math.cos(ball.angle) * vel;
+          ball.y += Math.sin(ball.angle) * vel;
+
+          // 碰壁反弹（翻转角度，让球游回来）
+          if (ball.x < m) { ball.x = m; ball.angle = Math.PI - ball.angle; }
+          if (ball.x > w - m) { ball.x = w - m; ball.angle = Math.PI - ball.angle; }
+          if (ball.y < m) { ball.y = m; ball.angle = -ball.angle; }
+          if (ball.y > h - m) { ball.y = h - m; ball.angle = -ball.angle; }
 
           break;
         }
@@ -1174,10 +1328,13 @@ class GameEngine {
       }
     }
 
-    // 应用
-    for (const b of this.balls) {
-      b.x += b.separateX;
-      b.y += b.separateY;
+    // 应用（MOT 跳过：靠 _resolveOverlaps 保证零重叠，避免强软分离与前进力互搏造成颤抖）
+    const isMot = this.balls[0] ? (this.balls[0].trajType === 'mot') : false;
+    if (!isMot) {
+      for (const b of this.balls) {
+        b.x += b.separateX;
+        b.y += b.separateY;
+      }
     }
 
     // === Anti-Crowd + Tutorial Choice === 硬位移修正（保留作为零重叠的硬保证）
