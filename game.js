@@ -184,6 +184,9 @@ class GameEngine {
     // === 选中音效连击 === 连续选对/选错计数（跨局累计，到 3 重置循环）
     this._streakCorrect = 0;
     this._streakWrong = 0;
+    this._feedbackText = null;     // 连击飘字内容（Good / Very Good! / No / Oh No!）
+    this._feedbackUntil = 0;      // 飘字消失时间戳（performance.now + 时长）
+    this._feedbackColor = '#fff'; // 飘字颜色
   }
 
   /* ------------------------------ public ------------------------------ */
@@ -616,6 +619,29 @@ class GameEngine {
       ctx.fillText('✓ Level Clear', canvas.width / 2, canvas.height / 2);
       ctx.restore();
     }
+
+    // 4.7 === 连击飘字反馈（Good / Very Good! / No / Oh No!）===
+    // 与语音并行，带淡出 + 上浮动效，确保即使语音不响也能看到连击效果。
+    if (this._feedbackText) {
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const remain = (this._feedbackUntil - now) / 900;
+      if (remain > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, remain * 1.3));
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 40px "Nunito", Arial, sans-serif';
+        const floatY = canvas.height * 0.40 - (1 - remain) * 26; // 向上飘
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+        ctx.strokeText(this._feedbackText, canvas.width / 2, floatY);
+        ctx.fillStyle = this._feedbackColor;
+        ctx.fillText(this._feedbackText, canvas.width / 2, floatY);
+        ctx.restore();
+      } else {
+        this._feedbackText = null; // 过期清除，避免残留
+      }
+    }
   }
 
   /**
@@ -690,8 +716,8 @@ class GameEngine {
       // === 选中音效连击（MOT 反馈）=== 连续选对：good / good / very good
       this._streakCorrect++;
       this._streakWrong = 0;
-      if (this._streakCorrect >= 3) { this._speakWord('veryGood'); this._streakCorrect = 0; }
-      else { this._speakWord('good'); }
+      if (this._streakCorrect >= 3) { this._speakWord('veryGood'); this._streakCorrect = 0; this.flashFeedback('Very Good!', '#2E7D32'); }
+      else { this._speakWord('good'); this.flashFeedback('Good', '#43A047'); }
       this.selectedBalls.push(clicked);
       // === GA4 Events === 选择目标球埋点
       if (typeof gtag !== 'undefined') {
@@ -706,8 +732,8 @@ class GameEngine {
         // 连续选错：no / no / oh no
         this._streakWrong++;
         this._streakCorrect = 0;
-        if (this._streakWrong >= 3) { this._speakWord('ohNo'); this._streakWrong = 0; }
-        else { this._speakWord('no'); }
+        if (this._streakWrong >= 3) { this._speakWord('ohNo'); this._streakWrong = 0; this.flashFeedback('Oh No!', '#C62828'); }
+        else { this._speakWord('no'); this.flashFeedback('No', '#E53935'); }
         setTimeout(() => { clicked.selectedState = 0; }, 500);
         return;
       }
@@ -715,8 +741,8 @@ class GameEngine {
       // === 选中音效连击（MOT 反馈）=== 连续选错：no / no / oh no
       this._streakWrong++;
       this._streakCorrect = 0;
-      if (this._streakWrong >= 3) { this._speakWord('ohNo'); this._streakWrong = 0; }
-      else { this._speakWord('no'); }
+      if (this._streakWrong >= 3) { this._speakWord('ohNo'); this._streakWrong = 0; this.flashFeedback('Oh No!', '#C62828'); }
+      else { this._speakWord('no'); this.flashFeedback('No', '#E53935'); }
       this.selectedBalls.push(clicked);
       // === GA4 Events === 选择非目标球（误点）埋点
       if (typeof gtag !== 'undefined') {
@@ -851,6 +877,20 @@ class GameEngine {
       ohNo: [180.0, 110.0],
     };
     this._playTone(FB[word] || [440.0], 0.14);
+  }
+
+  /**
+   * 在画面中央浮现一条连击反馈飘字（带淡出 + 上浮动效），
+   * 与语音并行，确保即使浏览器语音不响也能"看到"连击效果。
+   * @param {string} text
+   * @param {string} color
+   * @returns {void}
+   */
+  flashFeedback(text, color) {
+    this._feedbackText = text;
+    this._feedbackColor = color;
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    this._feedbackUntil = now + 900; // 0.9s 后淡出
   }
 
   /* ------------------------- phase transitions ------------------------- */
