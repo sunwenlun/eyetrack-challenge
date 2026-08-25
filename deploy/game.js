@@ -855,6 +855,16 @@ class GameEngine {
    * @returns {void}
    */
   _speakWord(word) {
+    const FB = {
+      good: [659.25, 880.0],          // E5 -> A5 上行，轻快
+      veryGood: [523.25, 659.25, 783.99], // C5-E5-G5 大三和弦，明亮
+      no: [220.0],                    // A3 单音低沉
+      ohNo: [180.0, 110.0],           // F3 -> A2 下行，失落感
+    };
+    // 1) 始终先播放可靠的 Web Audio 提示音——即使浏览器语音被静音/未装
+    //    英文语音包，连击反馈依然有声（音效优先于语音）。
+    this._playTone(FB[word] || [440.0], 0.14);
+    // 2) 再尽力叠加语音朗读（不阻塞、失败静默，不影响上面的提示音）。
     try {
       if (
         typeof window !== 'undefined' &&
@@ -867,16 +877,8 @@ class GameEngine {
         u.pitch = 1.1;
         u.volume = 1.0;
         window.speechSynthesis.speak(u);
-        return;
       }
-    } catch (e) { /* fall through to tone */ }
-    const FB = {
-      good: [659.25, 880.0],
-      veryGood: [523.25, 659.25, 783.99],
-      no: [220.0],
-      ohNo: [180.0, 110.0],
-    };
-    this._playTone(FB[word] || [440.0], 0.14);
+    } catch (e) { /* 提示音已播放，忽略语音异常 */ }
   }
 
   /**
